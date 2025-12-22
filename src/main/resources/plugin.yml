@@ -1,0 +1,37 @@
+name: RookiePlague
+version: '1.0-SNAPSHOT'
+main: com.cuzz.rookiePlague.RookiePlague
+api-version: '1.21'
+authors: [cuzz]
+description: 动物瘟疫系统插件
+
+commands:
+  rp:
+    description: RookiePlague 主命令
+    usage: |
+      /rp reload - 重载插件配置
+      /rp simulate <动物类型> [key=value...] - 模拟计算染疫公式
+      /rp breedcount <set|add|reset> [值] - 修改动物繁歖次数
+      /rp help - 显示帮助信息
+    aliases: [rookieplague, plague]
+
+permissions:
+  rookieplague.admin:
+    description: 管理员权限
+    default: op
+    children:
+      rookieplague.admin.reload: true
+      rookieplague.admin.simulate: true
+      rookieplague.admin.breedcount: true
+  rookieplague.admin.reload:
+    description: 重载配置的权限
+    default: op
+  rookieplague.admin.simulate:
+    description: 模拟计算染疫公式的权限
+    default: op
+  rookieplague.admin.breedcount:
+    description: 修改动物繁歖次数的权限
+    default: op
+  rookieplague.user:
+    description: 普通用户权限
+    default: true

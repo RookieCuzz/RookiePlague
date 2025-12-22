@@ -1,0 +1,33 @@
+# RookiePlague 中文语言文件
+# Chinese (Simplified) Language File
+
+# 系统消息
+messages:
+  # 插件启用消息
+  on-enable: "§a[RookiePlague] 插件已启用！"
+  # 插件禁用消息
+  on-disable: "§c[RookiePlague] 插件已禁用！"
+  # 配置重载成功
+  reload-success: "§a配置重载成功！"
+  # 配置重载失败
+  reload-failed: "§c配置重载失败，请查看控制台获取详细信息"
+  # 繁殖次数达到上限
+  breed-limit-reached: "§c这只{animal}已达到最大繁殖次数（{max}次）！"
+  # 区块动物数量达到上限
+  chunk-limit-reached: "§c该区块的{animal}数量已达到上限（{limit}只）！"
+  # 染疫动物无法繁殖
+  infected-cannot-breed: "§c染疫的动物无法繁殖！"
+  # 动物感染瘟疫
+  animal-infected: "§e一只{animal}感染了瘟疫！"
+  # 动物死于瘟疫
+  animal-died: "§c一只{animal}死于瘟疫"
+  # 无权限
+  no-permission: "§c你没有权限执行此命令！"
+  # 模拟计算权限不足
+  simulate-no-permission: "§c你没有权限执行模拟计算命令！"
+  # 模拟计算开始
+  simulate-start: "§e====== 染疫公式模拟计算开始 ======"
+  # 模拟计算结束
+  simulate-end: "§e====== 染疫公式模拟计算结束 ======"
+  # 未找到动物配置
+  animal-not-found: "§c错误: 未找到动物 {type} 的配置"

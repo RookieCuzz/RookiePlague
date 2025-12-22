@@ -1,0 +1,83 @@
+# RookiePlague 主配置文件
+# 动物瘟疫系统配置
+symbol:
+  plague: "瘟"
+  breed: "阉"
+# 插件基础设置
+settings:
+  # 是否启用调试模式
+  debug: false
+  # 配置文件版本
+  config-version: 1.0
+  # 默认语言 (zh_CN, en_US)
+  language: zh_CN
+  # 是否在控制台输出详细配置信息
+  verbose-logging: true
+
+# 瘟疫系统设置
+plague:
+  # 是否启用瘟疫系统
+  enabled: true
+  
+  # ==================== 定时任务配置 ====================
+  # 定时任务间隔配置（单位：秒）
+  schedule:
+    # 染疫检查间隔（异步扫描区块，判断染疫）
+    infection-check: 300
+    # 染疫检查首次延迟
+    infection-check-delay: 60
+    # 环境数据更新间隔（更新玩家数、天气等）
+    environment-update: 30
+    # 瘟疫伤害间隔（扣血、死亡判定）
+    damage-interval: 10
+  
+  # ==================== 染疫概率公式配置 ====================
+  # 染疫概率计算公式（支持 exp4j 数学表达式）
+  # 可用变量：
+  #   baseChance      - 基础概率
+  #   speciesFactor   - 物种因子（来自 animal.yml）
+  #   count           - 区块内同类动物数量
+  #   limit           - 区块上限（来自 animal.yml）
+  #   weatherFactor   - 天气系数（晴天/雨天/雷暴）
+  #   biomeFactor     - 生物群系系数
+  #   players         - 在线玩家数量
+  # 
+  # 默认公式说明：
+  #   基础概率 × 物种因子 × (数量/上限)² × 天气系数 × 生物群系系数 × 在线人数修正
+  formula: "baseChance * speciesFactor * ((count / limit) ^ 2) * weatherFactor * biomeFactor * (1 + (players / 100) * 0.1)"
+  
+  # 基础染疫概率（0.0 - 1.0）
+  base-chance: 0.1
+  
+  # 天气系数配置
+  weather-factor:
+    clear: 1.0      # 晴天
+    rain: 1.2       # 雨天
+    thunder: 1.5    # 雷暴
+  
+  # 生物群系系数配置（可自定义添加更多生物群系）
+  biome-factor:
+    default: 1.0              # 默认系数
+    plains: 1.0               # 平原
+    forest: 0.9               # 森林
+    swamp: 1.3                # 沼泽（更容易染疫）
+    desert: 0.8               # 沙漠
+    taiga: 0.9                # 针叶林
+    jungle: 1.2               # 丛林
+    savanna: 1.1              # 热带草原
+    dark_forest: 1.4          # 黑森林（高风险）
+  
+  # ==================== 瘟疫伤害配置 ====================
+  # 瘟疫伤害设置
+  damage:
+    # 是否启用瘟疫伤害
+    enabled: true
+    # 伤害间隔（秒）
+    interval: 10
+    # 每次伤害值（心）
+    amount: 1.0
+    # 最低血量（心，不会低于此值）
+    min-health: 0.5
+    # 注：每个物种的死亡时间不同，请在 animal.yml 中配置 plagueDeathTime
+
+
