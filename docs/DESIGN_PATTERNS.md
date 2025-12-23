@@ -1,8 +1,9 @@
-# MonsterController 插件通用设计模式
+# RookiePlague 插件通用设计模式
 
 ## 🎯 概述
 
-本文档总结了 MonsterController 插件的通用设计模式，这些模式可以直接迁移到其他 Bukkit/Spigot 插件项目中。
+本文档总结了 RookiePlague 插件的通用设计模式，这些模式可以直接迁移到其他 Bukkit/Spigot 插件项目中。
+RookiePlague 是一个动物瘟疫系统插件，实现了动物繁殖限制、疫病传播模拟、区块环境监控等功能。
 
 ---
 
@@ -12,12 +13,16 @@
 
 | 层级 | 职责 | 示例组件 |
 |------|------|----------|
-| **主类层** | 插件生命周期管理、依赖注入、启动初始化 | `MonsterController` |
-| **Wrapper层** | 原生事件包装、快速过滤、事件转发 | `CreatureSpawnWrapper` |
-| **Controller层** | 自定义事件监听、业务调度 | `ShinyMonsterController` |
-| **Service层** | 业务逻辑实现、外部API调用 | `ShinyMonsterService` |
-| **Model层** | 数据模型、配置映射 | `MonsterConfig` |
-| **SPI层** | 接口定义、扩展点 | `ConfigurationLoader`、`ShinyMonsterSpawner` |
+| **主类层** | 插件生命周期管理、依赖注入、启动初始化 | `RookiePlague` |
+| **Wrapper层** | 原生事件包装、快速过滤、事件转发 | `AnimalBreedWrapper` |
+| **Controller层** | 自定义事件监听、业务调度 | `AnimalBreedController` |
+| **Service层** | 业务逻辑实现、外部API调用 | `AnimalBreedService`、`PlagueInfectionService` |
+| **Model层** | 数据模型、配置映射 | `AnimalConfig` |
+| **DAO层** | 数据持久化访问 | `AnimalDataDao` |
+| **Cache层** | 线程安全的数据缓存 | `EnvironmentCache`、`InfectedAnimalCache` |
+| **Scheduler层** | 定时任务调度管理 | `PlagueCheckScheduler`、`PlagueDamageScheduler` |
+| **Task层** | 异步任务执行 | `PlagueCheckTask`、`PlagueDamageTask` |
+| **SPI层** | 接口定义、扩展点 | `ConfigurationLoader`、`MythicMobSpawner` |
 
 **迁移价值**: 清晰的职责分离，每层独立测试和替换
 
@@ -98,21 +103,30 @@ public class ConfigurationManager {
 ### 3. 依赖注入 (Dependency Injection)
 
 ```java
-// 构造函数注入
-public class ShinyMonsterService {
-    private final Plugin plugin;
-    private final ShinyMonsterSpawner spawner;
-    private final LoggerService logger;
-    private final ShinyMonsterSystemConfig systemConfig;
+// 构造函数注入示例
+public class PlagueInfectionService {
+    private final PlagueFormulaService plagueFormulaService;
+    private final AnimalConfigService animalConfigService;
+    private final AnimalDataService animalDataService;
+    private final EnvironmentCache environmentCache;
+    private final InfectedAnimalCache infectedAnimalCache;
+    private final LoggerService loggerService;
     
-    public ShinyMonsterService(Plugin plugin, 
-                               ShinyMonsterSpawner spawner,
-                               LoggerService logger,
-                               ShinyMonsterSystemConfig systemConfig) {
-        this.plugin = plugin;
-        this.spawner = spawner;
-        this.logger = logger;
-        this.systemConfig = systemConfig;
+    public PlagueInfectionService(PlagueFormulaService plagueFormulaService,
+                                 AnimalConfigService animalConfigService,
+                                 AnimalDataService animalDataService,
+                                 AnimalNameService animalNameService,
+                                 PluginConfig pluginConfig,
+                                 Plugin plugin,
+                                 EnvironmentCache environmentCache,
+                                 InfectedAnimalCache infectedAnimalCache,
+                                 LoggerService loggerService) {
+        this.plagueFormulaService = plagueFormulaService;
+        this.animalConfigService = animalConfigService;
+        this.animalDataService = animalDataService;
+        this.environmentCache = environmentCache;
+        this.infectedAnimalCache = infectedAnimalCache;
+        this.loggerService = loggerService;
     }
 }
 ```
@@ -176,10 +190,14 @@ public class LoggerService {
 
 | Service | 职责 |
 |---------|------|
-| `MonsterConfService` | 配置管理、数据查询 |
-| `MonsterCoreService` | PDC持久化、区块检测 |
-| `ShinyMonsterService` | 闪光怪物生成逻辑 |
+| `AnimalConfigService` | 动物配置管理、数据查询 |
+| `AnimalDataService` | PDC持久化、动物数据读写 |
+| `AnimalBreedService` | 动物繁殖业务逻辑 |
+| `PlagueInfectionService` | 染疫感染计算和处理 |
+| `PlagueFormulaService` | 染疫公式编译和计算 |
+| `LanguageService` | 多语言消息管理 |
 | `CommandService` | 命令处理业务 |
+| `MythicMobsSpawnerService` | MythicMobs集成（SPI实现） |
 
 **设计原则**:
 - 单一职责原则
@@ -193,60 +211,86 @@ public class LoggerService {
 ### 1. Wrapper → Event → Controller 模式
 
 ```
-Bukkit原生事件 
+Bukkit原生事件 (EntityBreedEvent)
    ↓
-CreatureSpawnWrapper (快速过滤 + 异步)
+AnimalBreedWrapper (快速过滤 + 类型检查)
    ↓
-ShinyMonsterSpawnRequestEvent (自定义异步事件)
+AnimalBreedRequestEvent (自定义同步事件)
    ↓
-ShinyMonsterController (监听处理)
+AnimalBreedController (监听处理)
    ↓
-ShinyMonsterService (业务实现)
+AnimalBreedService (业务实现)
 ```
 
 **优势**:
 - 原生事件不阻塞（快速返回）
-- 异步处理复杂逻辑
+- Wrapper 层只做快速过滤，不处理业务
 - 自定义事件可被其他插件监听
+- Controller 层专注业务调度
+- Service 层实现具体业务逻辑
 
 **实现示例**：
 
 ```java
 // Step 1: Wrapper 层 - 快速过滤
 @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-public void onCreatureSpawn(CreatureSpawnEvent event) {
-    MonsterConfig config = monsterService.getMonsterConfig(event.getEntityType().name());
+public void onEntityBreed(@NotNull EntityBreedEvent event) {
+    // 快速类型检查 - 只处理动物
+    Entity entity = event.getEntity();
+    if (!(entity instanceof Animals)) {
+        return;
+    }
+    
+    // 获取父母实体
+    Entity mother = event.getMother();
+    Entity father = event.getFather();
+    
+    // 快速验证父母都是动物类型
+    if (!(mother instanceof Animals) || !(father instanceof Animals)) {
+        return;
+    }
+    
+    // 包装为自定义事件
+    AnimalBreedRequestEvent customEvent = new AnimalBreedRequestEvent(
+        (Animals) mother,
+        (Animals) father
+    );
+    
+    // 同步触发自定义事件
+    Bukkit.getPluginManager().callEvent(customEvent);
+    
+    // 如果自定义事件被取消，则取消原生事件
+    if (customEvent.isCancelled()) {
+        event.setCancelled(true);
+    }
+}
+
+// Step 2: Controller 层 - 监听自定义事件
+@EventHandler(priority = EventPriority.NORMAL)
+public void onAnimalBreedRequest(@NotNull AnimalBreedRequestEvent event) {
+    Animals mother = event.getMother();
+    Animals father = event.getFather();
+    
+    // 获取动物配置
+    AnimalConfig config = animalConfigService.getAnimalConfig(event.getAnimalType());
     if (config == null) return;
     
-    // 快速同步判断
-    if (shouldRestrainSpawn(config)) {
+    // 检查染疫状态
+    BreedCheckResult infectionCheck = animalBreedService.checkInfectionStatus(mother, father);
+    if (!infectionCheck.isSuccess()) {
         event.setCancelled(true);
         return;
     }
     
-    // 异步处理复杂逻辑
-    handleShinySpawnAsync(event.getEntityType(), event.getLocation(), config);
-}
-
-// Step 2: 发送自定义事件
-private void handleShinySpawnAsync(...) {
-    Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-        if (shouldSpawnShiny(location, config)) {
-            ShinyMonsterSpawnRequestEvent customEvent = 
-                new ShinyMonsterSpawnRequestEvent(entityType, location, config);
-            Bukkit.getPluginManager().callEvent(customEvent);
-        }
-    });
-}
-
-// Step 3: Controller 层 - 监听自定义事件
-@EventHandler(priority = EventPriority.NORMAL)
-public void onShinyMonsterSpawnRequest(ShinyMonsterSpawnRequestEvent event) {
-    shinyMonsterService.handleShinySpawnAsync(
-        event.getEntityType(),
-        event.getLocation(),
-        event.getConfig()
-    );
+    // 检查繁殖次数限制
+    BreedCheckResult limitCheck = animalBreedService.checkBreedLimit(mother, father, config.getMaxBreedTimes());
+    if (!limitCheck.isSuccess()) {
+        event.setCancelled(true);
+        return;
+    }
+    
+    // 繁殖成功，处理结果
+    animalBreedService.handleSuccessfulBreed(mother, father, config);
 }
 ```
 
@@ -255,31 +299,43 @@ public void onShinyMonsterSpawnRequest(ShinyMonsterSpawnRequestEvent event) {
 ### 2. 自定义异步事件设计
 
 ```java
-public class ShinyMonsterSpawnRequestEvent extends Event {
+public class AnimalBreedRequestEvent extends Event implements Cancellable {
     private static final HandlerList HANDLERS = new HandlerList();
     
-    private final EntityType entityType;
-    private final Location location;
-    private final MonsterConfig config;
+    private final Animals mother;
+    private final Animals father;
+    private final String animalType;
+    private boolean cancelled;
+    private String cancelReason;
     
-    public ShinyMonsterSpawnRequestEvent(@NotNull EntityType entityType,
-                                        @NotNull Location location,
-                                        @NotNull MonsterConfig config) {
-        super(true);  // true = 异步事件
-        this.entityType = entityType;
-        this.location = location;
-        this.config = config;
+    public AnimalBreedRequestEvent(@NotNull Animals mother, @NotNull Animals father) {
+        super(false);  // false = 同步事件
+        this.mother = mother;
+        this.father = father;
+        this.animalType = mother.getType().name();
+        this.cancelled = false;
     }
     
     // Getters
     @NotNull
-    public EntityType getEntityType() { return entityType; }
+    public Animals getMother() { return mother; }
     
     @NotNull
-    public Location getLocation() { return location; }
+    public Animals getFather() { return father; }
     
     @NotNull
-    public MonsterConfig getConfig() { return config; }
+    public String getAnimalType() { return animalType; }
+    
+    // Cancellable 接口实现
+    @Override
+    public boolean isCancelled() { return cancelled; }
+    
+    @Override
+    public void setCancelled(boolean cancel) { this.cancelled = cancel; }
+    
+    public String getCancelReason() { return cancelReason; }
+    
+    public void setCancelReason(String reason) { this.cancelReason = reason; }
     
     // Bukkit 事件系统必需方法
     @NotNull
@@ -296,10 +352,12 @@ public class ShinyMonsterSpawnRequestEvent extends Event {
 ```
 
 **关键点**:
-- `super(true)` 标记为异步事件
+- `super(false)` 标记为同步事件（在主线程触发）
+- 实现 `Cancellable` 接口允许事件被取消
 - 必须实现 `getHandlerList()` 静态方法
-- 所有字段使用 `final` 保证不可变性
+- 核心字段使用 `final` 保证不可变性
 - 使用 `@NotNull` 注解明确空值约束
+- 提供 `cancelReason` 字段记录取消原因
 
 ---
 
@@ -308,27 +366,43 @@ public class ShinyMonsterSpawnRequestEvent extends Event {
 ### 1. Model驱动的配置解析
 
 ```java
-public class MonsterConfig {
-    private int id;
+public class AnimalConfig {
+    /** 动物类型（如 COW, PIG, CHICKEN 等，作为唯一标识） */
     private String type;
-    private String desc;
-    private int rangeChunk;
-    private int restrainRate;
-    private int spawnRate;
-    private double dropMulti;
-    private String shinyMob;
-    private String ceBlockId;
     
-    public MonsterConfig(Map<String, Object> data) {
-        this.id = getObjectAsInt(data.get("id"), 0);
-        this.type = (String) data.getOrDefault("type", "");
-        this.desc = (String) data.getOrDefault("desc", "");
-        this.rangeChunk = getObjectAsInt(data.get("rangeChunk"), 0);
-        this.restrainRate = getObjectAsInt(data.get("restrainRate"), 0);
-        this.spawnRate = getObjectAsInt(data.get("spawnRate"), 0);
-        this.dropMulti = getObjectAsDouble(data.get("dropMulti"), 1.0);
-        this.shinyMob = (String) data.getOrDefault("shinyMob", "");
-        this.ceBlockId = (String) data.getOrDefault("ceBlockId", "");
+    /** 动物描述（中文名称） */
+    private String desc;
+    
+    /** 物种因子（影响染疫概率计算的系数） */
+    private double speciesFactor;
+    
+    /** 区块上限（同类动物在单个区块内的数量上限） */
+    private int chunkLimit;
+    
+    /** 死亡生成尸体概率（百分比） */
+    private int corpseDropRate;
+    
+    /** 尸体的CE模型id */
+    private String corpseMobid;
+    
+    /** 最大繁殖次数（每只动物的繁殖次数上限） */
+    private int maxBreedTimes;
+    
+    /** 瘟疫致死时间（未治疗情况下从感染到死亡的时间，单位：秒） */
+    private int plagueDeathTime;
+    
+    // 从Map解析
+    private static AnimalConfig parseFromMap(Map<String, Object> map) {
+        AnimalConfig config = new AnimalConfig();
+        config.setType(getStringValue(map, "type", ""));
+        config.setDesc(getStringValue(map, "desc", ""));
+        config.setSpeciesFactor(getDoubleValue(map, "speciesFactor", 1.0));
+        config.setChunkLimit(getIntValue(map, "chunkLimit", 10));
+        config.setCorpseDropRate(getIntValue(map, "corpseDropRate", 50));
+        config.setCorpseMobid(getStringValue(map, "corpseMobid", ""));
+        config.setMaxBreedTimes(getIntValue(map, "maxBreedTimes", 5));
+        config.setPlagueDeathTime(getIntValue(map, "plagueDeathTime", 300));
+        return config;
     }
     
     // 类型安全转换
@@ -365,8 +439,10 @@ public class MonsterConfig {
 **设计特点**:
 - 类型安全转换（处理 YAML 的类型不确定性）
 - 默认值保护
-- 支持 List 和 Map 两种 YAML 格式
+- 支持 List 格式的 YAML 配置
 - 提供静态工厂方法 `parseFromConfig()` 和 `parseToMap()`
+- `parseToMap()` 使用 Stream API 转换为 Map，以 type 作为 key
+- 提供 `getStringValue()`, `getIntValue()`, `getDoubleValue()` 等类型安全提取方法
 
 ---
 
@@ -399,19 +475,39 @@ public void onReloadConfig(ReloadConfigEvent event) {
 @Override
 public void onEnable() {
     initializeLogger();           // 1. 日志优先
-    initializeConfiguration();    // 2. 配置加载
-    initializeServices();         // 3. 服务初始化
-    registerListeners();          // 4. 监听器注册
-    registerCommands();           // 5. 命令注册
-    printStartupInfo();           // 6. 启动信息
+    initializeConfigSystem();     // 2. 配置系统
+    initializeLanguage();         // 3. 语言服务
+    initializeServices();         // 4. 服务初始化
+    registerListeners();          // 5. 监听器注册
+    loadConfigurations();         // 6. 加载配置数据
+    registerCommands();           // 7. 命令注册
+    startPlagueSystem();          // 8. 启动瘟疫系统
 }
 
 private void initializeServices() {
-    initializeMonsterService();
-    initializeMonsterCoreService();
-    initializeShinyMonsterSpawner();
-    initializeShinyMonsterService();
-    initializeCommandService();
+    // DAO 层
+    animalDataDao = new AnimalDataDao(this);
+    
+    // Service 层（按依赖顺序）
+    commandService = new CommandService(this, loggerService);
+    animalDataService = new AnimalDataService(animalDataDao, loggerService);
+    animalNameService = new AnimalNameService(animalDataService, animalConfigService, pluginConfig, loggerService);
+    animalBreedService = new AnimalBreedService(animalDataService, animalNameService, loggerService);
+    plagueFormulaService = new PlagueFormulaService(loggerService);
+    
+    // Cache 层
+    environmentCache = new EnvironmentCache();
+    infectedAnimalCache = new InfectedAnimalCache();
+    
+    // SPI 实现
+    mythicMobSpawner = new MythicMobsSpawnerService(loggerService);
+    
+    // 高层服务
+    plagueInfectionService = new PlagueInfectionService(
+        plagueFormulaService, animalConfigService, animalDataService,
+        animalNameService, pluginConfig, this,
+        environmentCache, infectedAnimalCache, loggerService
+    );
 }
 ```
 
@@ -424,11 +520,22 @@ private void initializeServices() {
 **每个初始化方法的模板**：
 
 ```java
-private void initializeMonsterService() {
-    monsterService = new MonsterConfService(configManager);
-    monsterService.loadConfig();
-    loggerService.info("成功加载怪物配置，共 %d 个怪物配置项", 
-                       monsterService.getMonsterCount());
+private void initializeConfigSystem() {
+    loggerService.info("正在初始化配置系统...");
+    
+    // 创建配置加载器（SPI）
+    ConfigurationLoader loader = new FileConfigurationLoader(this);
+    
+    // 创建配置管理器（Facade）
+    configManager = new ConfigurationManager(loader);
+    
+    // 加载主配置
+    pluginConfig = new PluginConfig(configManager.getConfig("config.yml"));
+    
+    // 初始化配置服务
+    animalConfigService = new AnimalConfigService(configManager);
+    
+    loggerService.success("配置系统初始化完成");
 }
 ```
 
@@ -449,7 +556,229 @@ int random = ThreadLocalRandom.current().nextInt(1, 101);
 
 ---
 
-### 2. 异步→同步切换
+### 2. Scheduler + Task 模式（定时任务）
+
+**Scheduler（调度器）：管理任务的生命周期**
+
+```java
+public class PlagueCheckScheduler {
+    private final Plugin plugin;
+    private final PlagueInfectionService plagueInfectionService;
+    private final LoggerService loggerService;
+    private BukkitTask scheduledTask;
+    private boolean running;
+    
+    public PlagueCheckScheduler(@NotNull Plugin plugin,
+                                @NotNull PlagueInfectionService plagueInfectionService,
+                                @NotNull AnimalDataService animalDataService,
+                                @NotNull InfectedAnimalCache infectedAnimalCache,
+                                @NotNull LoggerService loggerService) {
+        this.plugin = plugin;
+        this.plagueInfectionService = plagueInfectionService;
+        this.loggerService = loggerService;
+        this.running = false;
+    }
+    
+    // 启动定时任务
+    public void start(long intervalSeconds, long delaySeconds) {
+        if (running) return;
+        
+        long intervalTicks = intervalSeconds * 20L;  // 转换为 tick
+        long delayTicks = delaySeconds * 20L;
+        
+        scheduledTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
+            plugin,
+            new PlagueCheckTask(plugin, plagueInfectionService, animalDataService, infectedAnimalCache, loggerService),
+            delayTicks,
+            intervalTicks
+        );
+        
+        running = true;
+        loggerService.info("染疫检查调度器已启动: 间隔 %d 秒", intervalSeconds);
+    }
+    
+    // 停止定时任务
+    public void stop() {
+        if (!running) return;
+        if (scheduledTask != null) {
+            scheduledTask.cancel();
+            scheduledTask = null;
+        }
+        running = false;
+        loggerService.info("染疫检查调度器已停止");
+    }
+    
+    // 手动触发一次检查
+    public void checkNow() {
+        Bukkit.getScheduler().runTaskAsynchronously(
+            plugin,
+            new PlagueCheckTask(plugin, plagueInfectionService, animalDataService, infectedAnimalCache, loggerService)
+        );
+    }
+}
+```
+
+**Task（异步任务）：执行具体业务逻辑**
+
+```java
+public class PlagueCheckTask implements Runnable {
+    private final Plugin plugin;
+    private final PlagueInfectionService plagueInfectionService;
+    private final AnimalDataService animalDataService;
+    private final InfectedAnimalCache infectedAnimalCache;
+    private final LoggerService loggerService;
+    
+    @Override
+    public void run() {
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            loggerService.debug("PLAGUE_CHECK", "开始染疫检查任务（异步）");
+            
+            // 遍历所有世界和区块
+            int processedChunks = 0;
+            for (World world : plugin.getServer().getWorlds()) {
+                if (!shouldProcessWorld(world)) continue;
+                
+                for (Chunk chunk : world.getLoadedChunks()) {
+                    // 只处理正在 tick 的区块
+                    if (chunk.getLoadLevel() != Chunk.LoadLevel.ENTITY_TICKING) continue;
+                    if (!chunk.isEntitiesLoaded()) continue;
+                    
+                    // 重建缓存：扫描已染疫的动物
+                    rebuildCacheForChunk(chunk);
+                    
+                    // 处理该区块（染疫判定）
+                    plagueInfectionService.processChunk(chunk);
+                    processedChunks++;
+                }
+            }
+            
+            long duration = System.currentTimeMillis() - startTime;
+            loggerService.info("染疫检查完成: 处理 %d 个区块，耗时 %d ms", processedChunks, duration);
+                
+        } catch (Exception e) {
+            loggerService.error("染疫检查任务执行异常", e);
+        }
+    }
+    
+    // 重建区块内的染疫动物缓存（服务器重启后恢复）
+    private void rebuildCacheForChunk(Chunk chunk) {
+        for (Entity entity : chunk.getEntities()) {
+            if (!(entity instanceof Animals animal)) continue;
+            if (animalDataService.isInfected(animal)) {
+                infectedAnimalCache.addInfected(animal.getUniqueId());
+            }
+        }
+    }
+}
+```
+
+**设计优势**：
+- Scheduler 负责任务调度，Task 负责业务执行，职责分离
+- 支持可配置的执行间隔和延迟
+- 支持手动触发（用于调试或命令）
+- Task 异步执行，不阻塞主线程
+- 任务内包含异常处理和性能统计
+
+---
+
+### 3. Cache 模式（线程安全缓存）
+
+**为什么需要 Cache？**
+- 主线程定期更新环境数据（玩家数、天气等）
+- 异步 Task 需要读取这些数据
+- 避免在异步线程中调用 Bukkit API（不线程安全）
+
+**实现示例：EnvironmentCache**
+
+```java
+public class EnvironmentCache {
+    // 使用 volatile 保证可见性
+    private volatile int onlinePlayerCount;
+    
+    // 使用 ConcurrentHashMap 保证线程安全
+    private final Map<String, WeatherType> worldWeatherCache;
+    
+    private volatile long lastUpdateTime;
+    
+    public EnvironmentCache() {
+        this.onlinePlayerCount = 0;
+        this.worldWeatherCache = new ConcurrentHashMap<>();
+        this.lastUpdateTime = System.currentTimeMillis();
+    }
+    
+    // 主线程调用：更新在线玩家数
+    public void updateOnlinePlayerCount(int count) {
+        this.onlinePlayerCount = count;
+        this.lastUpdateTime = System.currentTimeMillis();
+    }
+    
+    // 主线程调用：更新世界天气
+    public void updateWorldWeather(@NotNull World world, @NotNull WeatherType weatherType) {
+        worldWeatherCache.put(world.getName(), weatherType);
+        this.lastUpdateTime = System.currentTimeMillis();
+    }
+    
+    // 异步线程安全读取
+    public int getOnlinePlayerCount() {
+        return onlinePlayerCount;
+    }
+    
+    // 异步线程安全读取
+    @NotNull
+    public WeatherType getWorldWeather(@NotNull String worldName) {
+        return worldWeatherCache.getOrDefault(worldName, WeatherType.CLEAR);
+    }
+    
+    public enum WeatherType {
+        CLEAR, RAIN, THUNDER
+    }
+}
+```
+
+**配合定时更新任务**：
+
+```java
+public class EnvironmentUpdateScheduler {
+    public void start(int intervalSeconds) {
+        Bukkit.getScheduler().runTaskTimer(
+            plugin,
+            new EnvironmentUpdateTask(environmentCache, loggerService),
+            0L,  // 立即执行
+            intervalSeconds * 20L
+        );
+    }
+}
+
+public class EnvironmentUpdateTask implements Runnable {
+    @Override
+    public void run() {
+        // 主线程执行：更新缓存
+        int playerCount = Bukkit.getOnlinePlayers().size();
+        environmentCache.updateOnlinePlayerCount(playerCount);
+        
+        for (World world : Bukkit.getWorlds()) {
+            WeatherType weather = world.hasStorm() 
+                ? (world.isThundering() ? WeatherType.THUNDER : WeatherType.RAIN)
+                : WeatherType.CLEAR;
+            environmentCache.updateWorldWeather(world, weather);
+        }
+        
+        loggerService.debug("ENV_UPDATE", "环境数据已更新: 玩家数=%d", playerCount);
+    }
+}
+```
+
+**线程安全要点**：
+- 基本类型字段使用 `volatile` 关键字
+- 复杂数据结构使用 `ConcurrentHashMap`
+- 主线程写入（update），异步线程读取（get）
+- 避免在异步线程中直接调用 Bukkit API
+
+---
+
+### 4. 异步→同步切换
 
 ```java
 // 在 Wrapper 中异步处理
@@ -480,13 +809,20 @@ Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
 
 ---
 
-### 3. 延迟执行
+### 5. 延迟执行
 
 ```java
-// 延迟 N ticks 后执行（配置化延迟）
+// 延迟 N ticks 后执行（主线程）
 Bukkit.getScheduler().runTaskLater(plugin, () -> {
-    spawnShinyMonster(entityType, location, config);
-}, systemConfig.getSpawnDelayTicks());
+    // 执行需要延迟的操作（如延迟生成实体）
+    world.spawnEntity(location, EntityType.COW);
+}, delayTicks);
+
+// 延迟执行（异步线程）
+Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> {
+    // 执行需要延迟的异步操作
+    performAsyncCalculation();
+}, delayTicks);
 ```
 
 ---
@@ -498,10 +834,14 @@ Bukkit.getScheduler().runTaskLater(plugin, () -> {
 | **LoggerService** | `LoggerService.java` | ⭐ 简单 | 仅依赖 Plugin | ⭐⭐⭐⭐⭐ 强烈推荐 |
 | **ConfigurationManager** | `ConfigurationManager.java` | ⭐ 简单 | ConfigurationLoader 接口 | ⭐⭐⭐⭐⭐ 强烈推荐 |
 | **SPI接口** | `ConfigurationLoader.java` | ⭐ 简单 | 无 | ⭐⭐⭐⭐ 推荐 |
-| **Model基类** | `MonsterConfig.java` | ⭐⭐ 中等 | 需调整字段 | ⭐⭐⭐ 参考 |
-| **异步事件模板** | `ShinyMonsterSpawnRequestEvent.java` | ⭐⭐ 中等 | 需调整字段 | ⭐⭐⭐⭐ 推荐 |
-| **Wrapper模式** | `CreatureSpawnWrapper.java` | ⭐⭐⭐ 复杂 | 业务相关 | ⭐⭐⭐ 参考思路 |
-| **Controller模式** | `ShinyMonsterController.java` | ⭐⭐ 中等 | 业务相关 | ⭐⭐⭐⭐ 推荐 |
+| **Model基类** | `AnimalConfig.java` | ⭐⭐ 中等 | 需调整字段 | ⭐⭐⭐⭐ 推荐 |
+| **同步事件模板** | `AnimalBreedRequestEvent.java` | ⭐⭐ 中等 | 需调整字段 | ⭐⭐⭐⭐ 推荐 |
+| **Wrapper模式** | `AnimalBreedWrapper.java` | ⭐⭐ 中等 | 业务相关 | ⭐⭐⭐⭐ 推荐 |
+| **Controller模式** | `AnimalBreedController.java` | ⭐⭐ 中等 | 业务相关 | ⭐⭐⭐⭐ 推荐 |
+| **Scheduler模式** | `PlagueCheckScheduler.java` | ⭐⭐ 中等 | Task 类 | ⭐⭐⭐⭐ 推荐 |
+| **AsyncTask模式** | `PlagueCheckTask.java` | ⭐⭐⭐ 复杂 | 业务相关 | ⭐⭐⭐ 参考思路 |
+| **Cache模式** | `EnvironmentCache.java` | ⭐⭐ 中等 | 无 | ⭐⭐⭐⭐ 推荐 |
+| **LanguageService** | `LanguageService.java` | ⭐⭐ 中等 | ConfigurationManager | ⭐⭐⭐⭐ 推荐 |
 
 ---
 
@@ -517,10 +857,12 @@ Model:      数据模型
 ```
 
 **示例**：
-- `CreatureSpawnWrapper` - 监听 `CreatureSpawnEvent`
-- `ShinyMonsterController` - 监听 `ShinyMonsterSpawnRequestEvent`
-- `ShinyMonsterService` - 处理闪光怪物业务
-- `MonsterConfig` - 怪物配置数据模型
+- `AnimalBreedWrapper` - 监听 `EntityBreedEvent`
+- `AnimalBreedController` - 监听 `AnimalBreedRequestEvent`
+- `AnimalBreedService` - 处理动物繁殖业务
+- `AnimalConfig` - 动物配置数据模型
+- `PlagueCheckScheduler` - 调度染疫检查任务
+- `PlagueCheckTask` - 执行异步染疫检查
 
 ---
 
@@ -556,7 +898,7 @@ YamlConfiguration config = configManager.getConfig("config.yml");
 YamlConfiguration newConfig = configManager.reloadConfig("config.yml");
 
 // 服务层重新加载配置
-monsterService.loadConfig();
+animalConfigService.loadConfig();
 ```
 
 ---
@@ -569,25 +911,47 @@ public void onEnable() {
     // 1. 最底层服务（无依赖）
     loggerService = new LoggerService(this);
     
-    // 2. 配置服务（依赖 logger）
-    configManager = new ConfigurationManager(new FileConfigurationLoader(this));
+    // 2. 配置系统（依赖 logger）
+    ConfigurationLoader loader = new FileConfigurationLoader(this);
+    configManager = new ConfigurationManager(loader);
+    pluginConfig = new PluginConfig(configManager.getConfig("config.yml"));
+    animalConfigService = new AnimalConfigService(configManager);
     
-    // 3. 业务服务（依赖 config 和 logger）
-    monsterService = new MonsterConfService(configManager);
+    // 3. 语言服务（依赖 config）
+    languageService = new LanguageService(configManager, loggerService);
     
-    // 4. 高层服务（依赖其他服务）
-    shinyMonsterService = new ShinyMonsterService(
-        this, 
-        shinySpawner, 
-        loggerService, 
-        systemConfig
+    // 4. DAO 层（依赖 plugin）
+    animalDataDao = new AnimalDataDao(this);
+    
+    // 5. 基础服务（依赖 DAO 和 config）
+    animalDataService = new AnimalDataService(animalDataDao, loggerService);
+    animalNameService = new AnimalNameService(animalDataService, animalConfigService, pluginConfig, loggerService);
+    
+    // 6. 业务服务（依赖其他服务）
+    animalBreedService = new AnimalBreedService(animalDataService, animalNameService, loggerService);
+    plagueFormulaService = new PlagueFormulaService(loggerService);
+    
+    // 7. Cache 层
+    environmentCache = new EnvironmentCache();
+    infectedAnimalCache = new InfectedAnimalCache();
+    
+    // 8. 高层服务（依赖多个组件）
+    plagueInfectionService = new PlagueInfectionService(
+        plagueFormulaService, animalConfigService, animalDataService,
+        animalNameService, pluginConfig, this,
+        environmentCache, infectedAnimalCache, loggerService
     );
     
-    // 5. 控制器（依赖所有服务）
-    shinyMonsterController = new ShinyMonsterController(
-        shinyMonsterService, 
-        monsterCoreService, 
-        loggerService
+    // 9. 控制器（依赖服务层）
+    animalBreedController = new AnimalBreedController(
+        animalConfigService, animalBreedService, 
+        languageService, loggerService
+    );
+    
+    // 10. 调度器（依赖服务和缓存）
+    plagueCheckScheduler = new PlagueCheckScheduler(
+        this, plagueInfectionService, animalDataService,
+        infectedAnimalCache, loggerService
     );
 }
 ```
@@ -608,14 +972,14 @@ public void onEnable() {
 ```java
 // Wrapper 层使用 HIGH 优先级快速返回
 @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-public void onCreatureSpawn(CreatureSpawnEvent event) {
-    // 快速过滤逻辑
+public void onEntityBreed(@NotNull EntityBreedEvent event) {
+    // 快速过滤逻辑：类型检查 + 包装自定义事件
 }
 
 // Controller 层使用 NORMAL 优先级
 @EventHandler(priority = EventPriority.NORMAL)
-public void onShinyMonsterSpawnRequest(ShinyMonsterSpawnRequestEvent event) {
-    // 业务处理
+public void onAnimalBreedRequest(@NotNull AnimalBreedRequestEvent event) {
+    // 业务处理：检查配置、验证状态、调用Service
 }
 ```
 
@@ -626,33 +990,43 @@ public void onShinyMonsterSpawnRequest(ShinyMonsterSpawnRequestEvent event) {
 ### 完整架构图
 
 ```
-┌─────────────────────────────────────────┐
-│        MonsterController (主类)         │
-│  - 依赖注入所有Service                   │
-│  - 生命周期管理                          │
-│  - 提供Getter供外部访问                  │
-└─────────────────┬───────────────────────┘
+┌──────────────────────────────────────────────────┐
+│           RookiePlague (主类)                     │
+│  - 依赖注入所有Service/Controller/Scheduler       │
+│  - 生命周期管理 (onEnable/onDisable)             │
+│  - 提供Getter供外部访问                           │
+└─────────────────┬────────────────────────────────┘
                   │
-      ┌───────────┼───────────┐
-      ▼           ▼           ▼
-┌──────────┐ ┌──────────┐ ┌──────────┐
-│ Wrapper  │ │Controller│ │ Service  │
-│  层      │ │   层     │ │   层     │
-├──────────┤ ├──────────┤ ├──────────┤
-│原生事件  │→│自定义事件│→│业务逻辑  │
-│快速过滤  │ │  监听    │ │API调用   │
-│异步转发  │ │  调度    │ │外部集成  │
-└──────────┘ └──────────┘ └─────┬────┘
+      ┌───────────┼───────────┬──────────────┐
+      ▼           ▼           ▼              ▼
+┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+│ Wrapper  │ │Controller│ │Scheduler │ │ Service  │
+│  层      │ │   层     │ │   层     │ │   层     │
+├──────────┤ ├──────────┤ ├──────────┤ ├──────────┤
+│原生事件  │→│自定义事件│ │定时调度  │ │业务逻辑  │
+│快速过滤  │ │  监听    │ │任务管理  │ │公式计算  │
+│事件转发  │ │  调度    │ │生命周期  │ │数据持久化│
+└──────────┘ └──────────┘ └────┬─────┘ └─────┬────┘
+                                │             │
+                    ┌───────────┼─────────────┼─────────┐
+                    ▼           ▼             ▼         ▼
+              ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
+              │  Task   │ │  Model  │ │  Cache  │ │   DAO   │
+              │   层    │ │   层    │ │   层    │ │   层    │
+              ├─────────┤ ├─────────┤ ├─────────┤ ├─────────┤
+              │异步任务 │ │数据模型 │ │线程安全 │ │数据访问 │
+              │区块扫描 │ │配置映射 │ │环境缓存 │ │PDC操作  │
+              │染疫检查 │ │         │ │染疫缓存 │ │         │
+              └─────────┘ └─────────┘ └─────────┘ └─────────┘
+                                 ▲
                                  │
-                    ┌────────────┼────────────┐
-                    ▼            ▼            ▼
-              ┌─────────┐  ┌─────────┐  ┌─────────┐
-              │  Model  │  │   SPI   │  │  Utils  │
-              │   层    │  │  接口层 │  │  工具层 │
-              ├─────────┤  ├─────────┤  ├─────────┤
-              │数据模型 │  │可扩展点 │  │通用工具 │
-              │配置映射 │  │多实现   │  │辅助方法 │
-              └─────────┘  └─────────┘  └─────────┘
+                           ┌─────────┐
+                           │   SPI   │
+                           │  接口层 │
+                           ├─────────┤
+                           │可扩展点 │
+                           │多实现   │
+                           └─────────┘
 ```
 
 ---
@@ -661,13 +1035,19 @@ public void onShinyMonsterSpawnRequest(ShinyMonsterSpawnRequestEvent event) {
 
 ```
 1. 事件触发流程:
-   Bukkit Event → Wrapper (过滤) → Async Task → Custom Event → Controller → Service
+   Bukkit Event → Wrapper (过滤) → Custom Event → Controller → Service → DAO/Cache
 
 2. 配置加载流程:
-   YAML File → ConfigurationLoader → ConfigurationManager (缓存) → Service → Model
+   YAML File → ConfigurationLoader (SPI) → ConfigurationManager (Facade + Cache) → Service → Model
 
-3. 日志输出流程:
-   Service/Controller → LoggerService → Plugin Logger → Console
+3. 定时任务流程:
+   Scheduler (定时调度) → Task (异步执行) → Service (业务处理) → Cache (数据更新)
+
+4. 日志输出流程:
+   Service/Controller/Task → LoggerService → Plugin Logger → Console
+
+5. 染疫检查流程:
+   PlagueCheckScheduler → PlagueCheckTask (异步) → 扫描区块 → PlagueInfectionService → 计算染疫 → 更新PDC和Cache
 ```
 
 ---
@@ -684,26 +1064,30 @@ public void onShinyMonsterSpawnRequest(ShinyMonsterSpawnRequestEvent event) {
 
 ### 架构模式实施
 
-- [ ] 设计自定义事件（参考异步事件模板）
+- [ ] 设计自定义事件（参考同步事件模板 `AnimalBreedRequestEvent`）
 - [ ] 实现 Wrapper → Controller → Service 三层架构
 - [ ] 在主类中应用依赖注入模式
 - [ ] 设计并实现 SPI 扩展点
-- [ ] 遵循初始化流程设计（6步法）
+- [ ] 遵循初始化流程设计（8步法：日志→配置→语言→服务→监听器→加载数据→命令→调度器）
+- [ ] 实现 Scheduler + Task 异步任务模式
+- [ ] 实现线程安全的 Cache 层
 
 ### 代码规范
 
 - [ ] 使用 `ThreadLocalRandom` 处理并发随机数
 - [ ] 正确处理异步/同步线程切换
-- [ ] 统一命名规范（Wrapper/Controller/Service/Model）
+- [ ] 统一命名规范（Wrapper/Controller/Service/Model/Scheduler/Task/Cache）
 - [ ] 统一日志输出格式
 - [ ] 实现配置热重载功能
+- [ ] Cache 层使用 volatile 和 ConcurrentHashMap 保证线程安全
 
 ### 性能优化
 
 - [ ] 在 Wrapper 层快速过滤（HIGH 优先级）
-- [ ] 复杂逻辑异步处理
-- [ ] 配置缓存机制
-- [ ] 避免主线程阻塞
+- [ ] 复杂逻辑异步处理（Scheduler + Task 模式）
+- [ ] 配置缓存机制（ConfigurationManager）
+- [ ] 环境数据缓存（EnvironmentCache）
+- [ ] 避免主线程阻塞（异步 Task 处理区块扫描）
 
 ---
 
@@ -729,10 +1113,13 @@ public void onShinyMonsterSpawnRequest(ShinyMonsterSpawnRequestEvent event) {
 
 这套设计模式在 **Bukkit/Spigot 插件开发**中具有高度通用性，核心思想可扩展到其他 Java 项目。关键在于：
 
-1. **分层清晰**：各层职责明确，便于维护
-2. **解耦设计**：依赖注入 + SPI 模式
-3. **异步优化**：不阻塞主线程
-4. **可测试性**：每个组件独立可测
-5. **可扩展性**：SPI 接口支持多种实现
+1. **分层清晰**：各层职责明确，便于维护（Wrapper/Controller/Service/DAO/Cache/Scheduler/Task）
+2. **解耦设计**：依赖注入 + SPI 模式 + Facade 模式
+3. **异步优化**：Scheduler 调度异步 Task，不阻塞主线程
+4. **线程安全**：Cache 层使用 volatile 和 ConcurrentHashMap
+5. **可测试性**：每个组件独立可测，依赖注入便于 Mock
+6. **可扩展性**：SPI 接口支持多种实现（如 MythicMobSpawner）
+7. **可配置化**：所有参数从配置文件读取，支持热重载
+8. **国际化支持**：LanguageService 实现多语言
 
 建议根据项目实际需求，选择性地采用这些模式，避免过度设计。

@@ -1,17 +1,27 @@
-# RookiePlague - 通用配置管理架构实现
+# RookiePlague - 动物瘟疫系统插件
 
 ## 📋 项目概述
 
-基于 MonsterController 配置器架构设计，改造实现的通用配置管理系统，专为 **RookiePlague 动物瘟疫插件** 定制，同时具备良好的扩展性，可轻松适配其他类型的配置需求。
+RookiePlague 是一个基于 Paper/Spigot 的 Minecraft 服务器插件，实现了完整的动物瘟疫生态系统。通过模拟真实的疫病传播机制，为服务器增加动物养殖的挑战性和策略性。
 
-## ✨ 核心特性
+### 核心功能
 
-- 🏗️ **分层架构设计**：SPI 接口、实现层、管理层、服务层清晰分离
-- 🔌 **高扩展性**：基于 SPI 设计，支持多种配置加载方式（文件、数据库、云端等）
-- ⚡ **高性能**：配置缓存机制 + O(1) 查询效率
-- 🛡️ **类型安全**：强类型数据模型，避免配置解析错误
-- 🔄 **热重载支持**：无需重启服务器即可更新配置
-- 🧵 **线程安全**：基于 ConcurrentHashMap 的并发安全设计
+- 🦠 **疫病传播系统**：基于自定义公式的染疫概率计算，支持环境因子（天气、玩家数量、区块密度等）
+- 🐑 **繁殖限制机制**：限制动物繁殖次数，防止无限繁殖
+- ⚰️ **死亡与尸体系统**：染疫动物死亡后生成尸体（支持 CustomEntity 模型）
+- 🌍 **区块环境监控**：实时监控区块内动物密度和环境数据
+- 🔄 **热重载配置**：支持不重启服务器动态更新配置
+- 🌐 **国际化支持**：多语言消息系统
+
+## ✨ 技术特性
+
+- 🏗️ **分层架构**：Wrapper → Controller → Service → DAO/Cache，职责清晰
+- 🔌 **SPI 扩展**：支持 MythicMobs 集成，可扩展自定义生物
+- ⚡ **异步优化**：Scheduler + Task 模式，区块扫描不阻塞主线程
+- 🛡️ **线程安全**：Cache 层使用 volatile 和 ConcurrentHashMap
+- 🔄 **热重载**：配置、公式、语言文件支持实时重载
+- 🧮 **表达式引擎**：使用 exp4j 支持自定义染疫公式
+- 📊 **PDC 持久化**：动物数据保存到实体持久化容器
 
 ## 📦 项目结构
 
@@ -19,29 +29,63 @@
 RookiePlague/
 ├── src/main/java/com/cuzz/rookiePlague/
 │   ├── RookiePlague.java                      # 插件主类
-│   ├── config/                                 # 配置管理包
-│   │   ├── ConfigurationManager.java         # 配置管理器
+│   ├── cache/                                  # 缓存层
+│   │   ├── EnvironmentCache.java             # 环境数据缓存
+│   │   └── InfectedAnimalCache.java          # 染疫动物缓存
+│   ├── config/                                 # 配置管理
+│   │   ├── ConfigurationManager.java         # 配置管理器（Facade）
+│   │   ├── PluginConfig.java                 # 主配置模型
 │   │   ├── spi/
-│   │   │   └── ConfigurationLoader.java      # 配置加载器接口
+│   │   │   └── ConfigurationLoader.java      # 配置加载器接口（SPI）
 │   │   └── impl/
 │   │       └── FileConfigurationLoader.java  # 文件加载器实现
+│   ├── controller/                             # 控制器层
+│   │   ├── AnimalBreedController.java        # 繁殖控制器
+│   │   ├── BreedCountModifyController.java   # 繁殖次数修改控制器
+│   │   ├── ConfigReloadController.java       # 配置重载控制器
+│   │   └── PlagueSimulateController.java     # 瘟疫模拟控制器
+│   ├── dao/
+│   │   └── AnimalDataDao.java                # 动物数据 DAO
+│   ├── event/                                  # 自定义事件
+│   │   ├── AnimalBreedRequestEvent.java      # 繁殖请求事件
+│   │   ├── BreedCountModifyRequestEvent.java # 繁殖次数修改事件
+│   │   ├── ConfigReloadRequestEvent.java     # 配置重载事件
+│   │   └── PlagueSimulateRequestEvent.java   # 瘟疫模拟事件
 │   ├── model/
 │   │   └── AnimalConfig.java                 # 动物配置模型
-│   ├── service/
-│   │   └── AnimalConfigService.java          # 动物配置服务
-│   ├── command/
-│   │   └── AnimalConfigCommand.java          # 命令处理器
-│   └── example/
-│       └── AnimalConfigUsageExample.java     # 使用示例
+│   ├── scheduler/                              # 调度器层
+│   │   ├── EnvironmentUpdateScheduler.java   # 环境更新调度器
+│   │   ├── PlagueCheckScheduler.java         # 瘟疫检查调度器
+│   │   └── PlagueDamageScheduler.java        # 瘟疫伤害调度器
+│   ├── service/                                # 服务层
+│   │   ├── AnimalBreedService.java           # 繁殖服务
+│   │   ├── AnimalConfigService.java          # 配置服务
+│   │   ├── AnimalDataService.java            # 数据服务
+│   │   ├── AnimalNameService.java            # 名称服务
+│   │   ├── CommandService.java               # 命令服务
+│   │   ├── LanguageService.java              # 语言服务
+│   │   ├── LoggerService.java                # 日志服务
+│   │   ├── MythicMobsSpawnerService.java     # MythicMobs 生成器（SPI 实现）
+│   │   ├── PlagueFormulaService.java         # 瘟疫公式服务
+│   │   ├── PlagueInfectionService.java       # 瘟疫感染服务
+│   │   └── spi/
+│   │       └── MythicMobSpawner.java         # MythicMobs 生成器接口
+│   ├── task/                                   # 异步任务层
+│   │   ├── EnvironmentUpdateTask.java        # 环境更新任务
+│   │   ├── PlagueCheckTask.java              # 瘟疫检查任务
+│   │   └── PlagueDamageTask.java             # 瘟疫伤害任务
+│   └── wrapper/                                # Wrapper 层
+│       ├── AnimalBreedWrapper.java           # 繁殖事件包装器
+│       ├── CommandTabCompleter.java          # 命令补全
+│       └── CommandWrapper.java               # 命令包装器
 ├── src/main/resources/
+│   ├── language/
+│   │   └── zh_CN.yml                         # 中文语言文件
 │   ├── animal.yml                             # 动物配置文件
 │   ├── config.yml                             # 主配置文件
 │   └── plugin.yml                             # 插件描述文件
 ├── docs/                                       # 文档目录
-│   ├── 通用配置管理架构设计.md                  # 完整架构设计
-│   ├── 使用指南.md                             # 使用指南
-│   ├── 配置示例.md                             # 配置示例
-│   └── 配置器架构设计.md                        # 原始架构参考
+│   └── DESIGN_PATTERNS.md                    # 设计模式文档
 └── pom.xml                                     # Maven 配置
 ```
 
@@ -68,36 +112,51 @@ mvn clean package
 
 ### 4. 基本命令
 
-| 命令 | 说明 |
-|------|------|
-| `/animal list` | 列出所有动物配置 |
-| `/animal info <类型>` | 查看指定动物的详细配置 |
-| `/animal highrisk` | 查看高危动物列表 |
-| `/animal reload` | 重载配置（需要 OP 权限） |
+| 命令 | 说明 | 权限 |
+|------|------|------|
+| `/rp reload` | 重载所有配置文件 | OP |
+| `/rp breed <动物UUID> set <次数>` | 设置动物繁殖次数 | OP |
+| `/rp breed <动物UUID> add <次数>` | 增加动物繁殖次数 | OP |
+| `/rp plague simulate` | 模拟一次瘟疫检查 | OP |
 
 ## 📖 架构说明
 
 ### 核心组件
 
-| 组件 | 职责 | 特点 |
+| 层级 | 组件 | 职责 |
 |------|------|------|
-| **ConfigurationLoader** | 配置加载接口（SPI） | 支持多种实现方式 |
-| **FileConfigurationLoader** | 文件加载器实现 | 支持 YAML 列表格式 |
-| **ConfigurationManager** | 配置缓存与管理 | 线程安全、热重载 |
-| **AnimalConfig** | 动物配置数据模型 | 类型安全、容错解析 |
-| **AnimalConfigService** | 配置业务逻辑服务 | O(1) 查询、高级筛选 |
+| **Wrapper** | AnimalBreedWrapper | 监听原生繁殖事件，快速过滤并转发 |
+| **Controller** | AnimalBreedController | 监听自定义事件，调度业务处理 |
+| **Service** | PlagueInfectionService | 染疫感染计算和处理 |
+| **Service** | PlagueFormulaService | 公式编译和计算（exp4j） |
+| **Service** | AnimalBreedService | 繁殖次数检查和更新 |
+| **DAO** | AnimalDataDao | PDC 数据持久化访问 |
+| **Cache** | EnvironmentCache | 环境数据缓存（线程安全） |
+| **Cache** | InfectedAnimalCache | 染疫动物缓存 |
+| **Scheduler** | PlagueCheckScheduler | 定时调度染疫检查任务 |
+| **Task** | PlagueCheckTask | 异步执行区块扫描和染疫判定 |
 
 ### 数据流程
 
-```mermaid
-graph LR
-    A[插件启动] --> B[初始化配置加载器]
-    B --> C[创建配置管理器]
-    C --> D[初始化业务服务]
-    D --> E[加载配置文件]
-    E --> F[解析为数据模型]
-    F --> G[缓存到服务层]
-    G --> H[提供业务访问]
+#### 1. 插件启动流程
+```
+初始化日志服务 → 初始化配置系统 → 初始化语言服务 → 初始化服务层 
+→ 注册监听器 → 加载配置数据 → 注册命令 → 启动瘟疫系统
+```
+
+#### 2. 繁殖事件流程
+```
+EntityBreedEvent → AnimalBreedWrapper（快速过滤）
+→ AnimalBreedRequestEvent（自定义事件）
+→ AnimalBreedController（检查染疫状态、繁殖次数）
+→ AnimalBreedService（更新 PDC 数据）
+```
+
+#### 3. 瘟疫检查流程
+```
+PlagueCheckScheduler（每N秒）→ PlagueCheckTask（异步）
+→ 扫描区块内动物 → PlagueInfectionService（计算染疫概率）
+→ 更新 PDC 和 InfectedAnimalCache
 ```
 
 ## 🔧 配置文件
@@ -124,151 +183,244 @@ graph LR
   plagueDeathTime: 240
 ```
 
-### 配置字段说明
+### 动物配置字段说明
 
-| 字段 | 类型 | 说明 | 建议范围 |
+| 字段 | 类型 | 说明 | 示例值 |
 |------|------|------|----------|
-| type | String | 动物类型（唯一标识） | Bukkit EntityType |
-| desc | String | 动物描述 | 任意中文名称 |
-| speciesFactor | double | 物种因子 | 0.1 - 2.0 |
-| chunkLimit | int | 区块上限 | 10 - 25 |
-| corpseDropRate | int | 尸体掉落率 | 0 - 100 |
-| corpseMobid | String | 尸体模型ID | CE 模型 ID |
-| maxBreedTimes | int | 最大繁殖次数 | 3 - 10 |
-| plagueDeathTime | int | 致死时间（秒） | 180 - 600 |
+| type | String | 动物类型（Bukkit EntityType） | SHEEP, COW, CHICKEN |
+| desc | String | 动物中文名称 | 羊, 牛, 鸡 |
+| speciesFactor | double | 物种因子（影响染疫概率） | 0.9, 1.2, 1.5 |
+| chunkLimit | int | 单个区块内的数量上限 | 18, 15, 20 |
+| corpseDropRate | int | 死亡时尸体掉落概率（%） | 70, 80, 60 |
+| corpseMobid | String | 尸体的 CustomEntity 模型 ID | animal_corpse_large |
+| maxBreedTimes | int | 单只动物最大繁殖次数 | 5, 8, 10 |
+| plagueDeathTime | int | 染疫后致死时间（秒） | 320, 240, 180 |
+
+### 主配置字段说明
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `language` | 语言文件名称 | zh_CN |
+| `plague.enabled` | 是否启用瘟疫系统 | true |
+| `plague.formula` | 染疫概率计算公式 | 见下方 |
+| `plague.infection-check-interval` | 染疫检查间隔（秒） | 300 |
+| `plague.damage.enabled` | 是否启用瘟疫伤害 | true |
+| `plague.damage.interval` | 伤害间隔（秒） | 60 |
+| `environment.update-interval` | 环境数据更新间隔（秒） | 30 |
+
+### 瘟疫公式说明
+
+默认公式：`speciesFactor * (1 + playerCount * 0.01) * weatherFactor * (density / 10)`
+
+- `speciesFactor`：动物配置中的物种因子
+- `playerCount`：在线玩家数量
+- `weatherFactor`：天气因子（晴天=1.0, 雨天=1.2, 雷暴=1.5）
+- `density`：区块内动物密度
+
+可使用 exp4j 支持的数学函数，如 `min()`, `max()`, `sqrt()` 等
 
 ## 💻 代码示例
 
 ### 基础使用
 
 ```java
-// 获取服务
+// 获取插件实例
 RookiePlague plugin = (RookiePlague) Bukkit.getPluginManager().getPlugin("RookiePlague");
-AnimalConfigService service = plugin.getAnimalConfigService();
 
-// 查询配置
-AnimalConfig sheep = service.getAnimalConfig("SHEEP");
+// 获取服务
+AnimalConfigService configService = plugin.getAnimalConfigService();
+AnimalDataService dataService = plugin.getAnimalDataService();
+
+// 查询动物配置
+AnimalConfig sheep = configService.getAnimalConfig("SHEEP");
 if (sheep != null) {
     double factor = sheep.getSpeciesFactor();
-    int chunkLimit = sheep.getChunkLimit();
-    // 使用配置...
+    int maxBreeds = sheep.getMaxBreedTimes();
+    int deathTime = sheep.getPlagueDeathTime();
 }
+
+// 检查动物是否染疫
+Animals animal = (Animals) entity;
+boolean infected = dataService.isInfected(animal);
+
+// 获取/设置繁殖次数
+int breedCount = dataService.getBreedCount(animal);
+dataService.setBreedCount(animal, 3);
 ```
 
-### 高级查询
+### 瘟疫系统集成
 
 ```java
-// 查询高危动物（物种因子 1.0-2.0）
-List<AnimalConfig> highRisk = service.getAnimalsBySpeciesFactor(1.0, 2.0);
+// 手动触发一次瘟疫检查
+PlagueCheckScheduler scheduler = plugin.getPlagueCheckScheduler();
+scheduler.checkNow();
 
-// 查询特定区块上限范围的动物
-List<AnimalConfig> limited = service.getAnimalsByChunkLimit(15, 20);
+// 获取环境缓存数据
+EnvironmentCache envCache = plugin.getEnvironmentCache();
+int playerCount = envCache.getOnlinePlayerCount();
+WeatherType weather = envCache.getWorldWeather("world");
 
-// 根据尸体模型查询
-List<AnimalConfig> largeCorpse = service.getAnimalsByCorpseMobid("animal_corpse_large");
+// 使用瘟疫公式服务计算概率
+PlagueFormulaService formulaService = plugin.getPlagueFormulaService();
+Map<String, Double> variables = new HashMap<>();
+variables.put("speciesFactor", 1.2);
+variables.put("playerCount", (double) playerCount);
+variables.put("weatherFactor", 1.0);
+variables.put("density", 8.0);
+
+double probability = formulaService.calculate(variables);
 ```
 
-### 在监听器中使用
+### 自定义事件监听
 
 ```java
+// 监听繁殖请求事件
 @EventHandler
-public void onAnimalBreed(EntityBreedEvent event) {
-    if (!(event.getEntity() instanceof Animals animal)) return;
+public void onAnimalBreedRequest(AnimalBreedRequestEvent event) {
+    Animals mother = event.getMother();
+    Animals father = event.getFather();
+    String animalType = event.getAnimalType();
     
-    String type = animal.getType().name();
-    AnimalConfig config = service.getAnimalConfig(type);
+    // 获取配置
+    AnimalConfig config = configService.getAnimalConfig(animalType);
+    if (config == null) return;
     
-    if (config != null) {
-        // 检查繁殖次数限制
-        int currentBreeds = getBreedCount(animal);
-        if (currentBreeds >= config.getMaxBreedTimes()) {
-            event.setCancelled(true);
-        }
+    // 自定义逻辑
+    if (someCondition) {
+        event.setCancelled(true);
+        event.setCancelReason("自定义取消原因");
     }
+}
+
+// 监听配置重载事件
+@EventHandler
+public void onConfigReload(ConfigReloadRequestEvent event) {
+    CommandSender sender = event.getSender();
+    sender.sendMessage("配置重载完成！");
 }
 ```
 
 ## 🔌 扩展指南
 
-### 添加新的配置类型
-
-#### 1. 创建数据模型
+### 1. 实现自定义 MythicMobs 生成器
 
 ```java
-public class MedicineConfig {
-    private String id;
-    private String name;
-    private int cureRate;
-    // Getter/Setter...
-    
-    public static Map<String, MedicineConfig> parseToMap(YamlConfiguration config) {
-        // 解析逻辑
-    }
-}
-```
-
-#### 2. 创建服务类
-
-```java
-public class MedicineConfigService {
-    private final ConfigurationManager configManager;
-    private Map<String, MedicineConfig> medicineMap;
-    
-    public boolean loadConfig() {
-        YamlConfiguration config = configManager.getConfig("medicine.yml");
-        this.medicineMap = MedicineConfig.parseToMap(config);
-        return true;
-    }
-}
-```
-
-#### 3. 在主类中注册
-
-```java
-private MedicineConfigService medicineService;
-
-@Override
-public void onEnable() {
-    // 初始化服务
-    medicineService = new MedicineConfigService(configManager);
-    medicineService.loadConfig();
-}
-```
-
-### 添加新的加载方式
-
-```java
-public class DatabaseConfigurationLoader implements ConfigurationLoader {
+public class CustomMythicMobSpawner implements MythicMobSpawner {
     @Override
-    public YamlConfiguration loadConfig(String name) {
-        // 从数据库加载配置
+    public boolean isEnabled() {
+        // 检查是否启用
+        return Bukkit.getPluginManager().isPluginEnabled("MythicMobs");
+    }
+    
+    @Override
+    public boolean spawn(String mobId, Location location) {
+        // 实现生成逻辑
+        return MythicBukkit.inst().getMobManager().spawnMob(mobId, location) != null;
+    }
+}
+```
+
+### 2. 添加新的调度任务
+
+```java
+// 1. 创建 Task
+public class CustomTask implements Runnable {
+    @Override
+    public void run() {
+        // 异步执行的逻辑
     }
 }
 
-// 使用
-ConfigurationLoader loader = new DatabaseConfigurationLoader(dataSource);
-ConfigurationManager manager = new ConfigurationManager(loader);
+// 2. 创建 Scheduler
+public class CustomScheduler {
+    private BukkitTask scheduledTask;
+    
+    public void start(int intervalSeconds) {
+        scheduledTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
+            plugin,
+            new CustomTask(),
+            0L,
+            intervalSeconds * 20L
+        );
+    }
+    
+    public void stop() {
+        if (scheduledTask != null) {
+            scheduledTask.cancel();
+        }
+    }
+}
+
+// 3. 在主类中启动
+customScheduler = new CustomScheduler();
+customScheduler.start(60);
 ```
 
-## 📊 性能指标
+### 3. 自定义染疫公式
 
-| 指标 | 数值 | 说明 |
-|------|------|------|
-| 配置加载时间 | ~5ms | 2个动物配置 |
-| 单次查询时间 | ~0.001ms | O(1) 复杂度 |
-| 10000次查询 | ~10ms | 使用缓存 |
-| 重载配置时间 | ~8ms | 包含文件读取 |
-| 内存占用 | ~2MB | 含配置缓存 |
+在 `config.yml` 中修改 `plague.formula`：
+
+```yaml
+plague:
+  formula: "speciesFactor * min(density / 5, 2.0) * (1 + playerCount * 0.02)"
+```
+
+支持的变量：
+- `speciesFactor`: 物种因子
+- `playerCount`: 在线玩家数
+- `weatherFactor`: 天气因子（1.0/1.2/1.5）
+- `density`: 区块动物密度
+
+支持的函数（exp4j）：
+- 基础运算：`+`, `-`, `*`, `/`, `^`
+- 函数：`min()`, `max()`, `sqrt()`, `abs()`, `log()`, `sin()`, `cos()` 等
+
+## 📊 性能特性
+
+| 特性 | 实现方式 | 优势 |
+|------|----------|------|
+| **配置查询** | ConcurrentHashMap 缓存 | O(1) 查询，线程安全 |
+| **区块扫描** | 异步 Task，只处理 ENTITY_TICKING 区块 | 不阻塞主线程 |
+| **环境数据** | Cache 层缓存，主线程定期更新 | 异步线程安全读取 |
+| **染疫检查** | PlagueCheckScheduler 可配置间隔 | 可根据服务器性能调整 |
+| **公式计算** | exp4j 预编译表达式 | 避免重复解析 |
+| **PDC 访问** | 异步读取，同步写入 | 符合 Bukkit API 规范 |
+
+### 推荐配置
+
+- **小型服务器**（<20人）：
+  - `infection-check-interval: 180`（3分钟）
+  - `environment.update-interval: 60`（1分钟）
+
+- **中型服务器**（20-50人）：
+  - `infection-check-interval: 300`（5分钟）
+  - `environment.update-interval: 30`（30秒）
+
+- **大型服务器**（>50人）：
+  - `infection-check-interval: 600`（10分钟）
+  - `environment.update-interval: 60`（1分钟）
 
 ## 📚 文档
 
-- [通用配置管理架构设计.md](docs/通用配置管理架构设计.md) - 完整的架构设计文档
-- [使用指南.md](docs/使用指南.md) - 详细的使用说明
-- [配置示例.md](docs/配置示例.md) - 配置文件示例和规范
+- [DESIGN_PATTERNS.md](docs/DESIGN_PATTERNS.md) - 插件设计模式和架构文档
 
-## 🤝 贡献
+### 配置文件模板
 
-欢迎提交 Issue 和 Pull Request！
+- `animal.yml` - 动物配置模板（插件首次启动自动生成）
+- `config.yml` - 主配置文件（包含瘟疫系统、调度器等配置）
+- `language/zh_CN.yml` - 中文语言文件
+
+## 🔧 依赖项
+
+### 必需依赖
+
+- **Paper API** (1.21-R0.1-SNAPSHOT)
+- **SnakeYAML** (2.0)
+- **exp4j** (0.4.8)
+
+### 可选依赖
+
+- **MythicMobs** (5.6.1) - 用于生成自定义尸体模型
 
 ## 📄 许可证
 
@@ -280,9 +432,10 @@ ConfigurationManager manager = new ConfigurationManager(loader);
 
 ## 🙏 致谢
 
-- 基于 MonsterController 项目的配置器架构设计
-- 使用 Paper API 和 SnakeYAML 库
+- Paper API 团队
+- MythicMobs 插件
+- exp4j 数学表达式引擎
 
 ---
 
-**注意**：本项目为通用配置管理架构的实现示例，可根据实际需求进行定制和扩展。
+**注意**：本插件为动物瘟疫系统的完整实现，采用分层架构设计，可作为 Bukkit/Spigot 插件开发的参考示例。
